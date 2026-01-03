@@ -3269,12 +3269,27 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
         ),
         Positioned.fill(
           child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 240),
-            switchInCurve: Curves.easeOut,
-            switchOutCurve: Curves.easeIn,
+            duration: const Duration(milliseconds: 500),
+            switchInCurve: Curves.easeInOutCubic,
+            switchOutCurve: Curves.easeInOutCubic,
+            transitionBuilder: (child, animation) {
+              return FadeTransition(
+                opacity: animation,
+                child: ScaleTransition(
+                  scale: animation.drive(
+                    Tween<double>(
+                      begin: 0.96,
+                      end: 1.0,
+                    ).chain(CurveTween(curve: Curves.easeOutCubic)),
+                  ),
+                  child: child,
+                ),
+              );
+            },
             child: showErrorOverlay
                 ? Container(
-                    color: Colors.white.withValues(alpha: 0.9),
+                    key: const ValueKey('error_overlay'),
+                    color: Colors.white,
                     child: Center(
                       child: _buildErrorOverlay(
                         context,
@@ -3285,10 +3300,11 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
                   )
                 : isConnecting
                 ? Container(
-                    color: Colors.white.withValues(alpha: 0.9),
+                    key: const ValueKey('loading_overlay'),
+                    color: Colors.white.withValues(alpha: 0.98),
                     child: Center(child: _buildFancyLoader(context)),
                   )
-                : const SizedBox.shrink(),
+                : const SizedBox.shrink(key: ValueKey('none')),
           ),
         ),
       ],
@@ -3785,41 +3801,36 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
     final color = Theme.of(context).colorScheme.primary;
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.easeOut,
+      duration: const Duration(milliseconds: 800),
+      curve: Curves.elasticOut,
       builder: (context, value, child) {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             SizedBox(
-              width: 72,
+              width: 80,
+              height: 40,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: List.generate(3, (index) {
-                  final delay = index * 0.15;
-                  final t = (value - delay).clamp(0.0, 1.0);
-                  final height = 10 + 26 * Curves.easeInOut.transform(t);
-                  final opacity = 0.2 + 0.6 * t;
-                  return AnimatedContainer(
-                    duration: const Duration(milliseconds: 280),
-                    curve: Curves.easeInOut,
-                    width: 10,
-                    height: height,
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: opacity),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
+                children: List.generate(4, (index) {
+                  return _AnimatedBar(
+                    index: index,
+                    color: color,
+                    baseHeight: 12,
+                    maxExtraHeight: 24,
                   );
                 }),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 20),
             Text(
-              '正在连接数据库...',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              '正在建立连接...',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
                 color: Theme.of(
                   context,
-                ).colorScheme.onSurface.withValues(alpha: 0.8),
+                ).colorScheme.onSurface.withValues(alpha: 0.7),
+                letterSpacing: 1.2,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
@@ -4007,5 +4018,69 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
         ),
       );
     }
+  }
+}
+
+class _AnimatedBar extends StatefulWidget {
+  final int index;
+  final Color color;
+  final double baseHeight;
+  final double maxExtraHeight;
+
+  const _AnimatedBar({
+    required this.index,
+    required this.color,
+    required this.baseHeight,
+    required this.maxExtraHeight,
+  });
+
+  @override
+  State<_AnimatedBar> createState() => _AnimatedBarState();
+}
+
+class _AnimatedBarState extends State<_AnimatedBar>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+
+    _animation = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
+
+    Future.delayed(Duration(milliseconds: widget.index * 150), () {
+      if (mounted) _controller.repeat(reverse: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return Container(
+          width: 8,
+          height: widget.baseHeight +
+              (widget.maxExtraHeight * _animation.value),
+          decoration: BoxDecoration(
+            color: widget.color.withValues(
+              alpha: 0.3 + (0.7 * _animation.value),
+            ),
+            borderRadius: BorderRadius.circular(4),
+          ),
+        );
+      },
+    );
   }
 }

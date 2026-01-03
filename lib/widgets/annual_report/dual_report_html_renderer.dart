@@ -648,7 +648,7 @@ $thisYearSection
 
     return '''
 <div class="label-text">常用语</div>
-<div class="hero-title">你们的专属口头禅</div>
+<div class="hero-title">独属于你们的秘密</div>
 <div class="hero-desc">$yearText，你们说得最多的是：</div>
 <div class="word-cloud-container">$wordItems</div>
 <div class="top-phrases">

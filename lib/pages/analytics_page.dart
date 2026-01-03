@@ -53,6 +53,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   bool _showDualReportSubPage = false;
   String _contactSearchQuery = '';
   Set<String> _excludedUsernames = {};
+  bool _autoLoadScheduled = false;
 
   bool get _isSubPage => _showAnnualReportSubPage || _showDualReportSubPage;
 
@@ -651,41 +652,114 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final appState = context.watch<AppState>();
+    final hasError = appState.errorMessage != null;
+    final isConnecting =
+        appState.isLoading ||
+        (!appState.databaseService.isConnected && !hasError);
+    final showErrorOverlay =
+        !appState.isLoading &&
+        !appState.databaseService.isConnected &&
+        hasError;
+
+    if (appState.databaseService.isConnected &&
+        !_isLoading &&
+        !_isSubPage &&
+        _overallStats == null &&
+        !_autoLoadScheduled) {
+      _autoLoadScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        _autoLoadScheduled = false;
+        await _loadData();
+      });
+    }
+
     return Container(
       color: Theme.of(context).colorScheme.surface,
-      child: Column(
+      child: Stack(
         children: [
-          // 自定义标题栏
-          _buildHeader(),
-          // 内容区域
-          Expanded(
+          Column(
+            children: [
+              // 自定义标题栏
+              _buildHeader(),
+              // 内容区域
+              Expanded(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 240),
+                  switchInCurve: Curves.easeOut,
+                  switchOutCurve: Curves.easeIn,
+                  child: _isLoading
+                      ? _buildLoadingView()
+                      : _showAnnualReportSubPage
+                          ? _AnnualReportSubPage(
+                              databaseService: widget.databaseService,
+                              excludedUsernames: _excludedUsernames,
+                              onClose: () {
+                                setState(
+                                  () => _showAnnualReportSubPage = false,
+                                );
+                              },
+                            )
+                          : _showDualReportSubPage
+                          ? _DualReportSubPage(
+                              key: _dualReportKey,
+                              databaseService: widget.databaseService,
+                              rankings:
+                                  _allContactRankings ??
+                                  const <ContactRanking>[],
+                              excludedUsernames: _excludedUsernames,
+                              onClose: () {
+                                setState(
+                                  () => _showDualReportSubPage = false,
+                                );
+                              },
+                            )
+                          : _overallStats == null
+                              ? _buildEmptyView()
+                              : _buildContent(),
+                ),
+              ),
+            ],
+          ),
+          Positioned.fill(
             child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 240),
-              switchInCurve: Curves.easeOut,
-              switchOutCurve: Curves.easeIn,
-              child: _isLoading
-                  ? _buildLoadingView()
-                  : _showAnnualReportSubPage
-                      ? _AnnualReportSubPage(
-                          databaseService: widget.databaseService,
-                          excludedUsernames: _excludedUsernames,
-                          onClose: () {
-                            setState(() => _showAnnualReportSubPage = false);
-                          },
-                        )
-                      : _showDualReportSubPage
-                      ? _DualReportSubPage(
-                          key: _dualReportKey,
-                          databaseService: widget.databaseService,
-                          rankings: _allContactRankings ?? const <ContactRanking>[],
-                          excludedUsernames: _excludedUsernames,
-                          onClose: () {
-                            setState(() => _showDualReportSubPage = false);
-                          },
-                        )
-                      : _overallStats == null
-                          ? _buildEmptyView()
-                          : _buildContent(),
+              duration: const Duration(milliseconds: 500),
+              switchInCurve: Curves.easeInOutCubic,
+              switchOutCurve: Curves.easeInOutCubic,
+              transitionBuilder: (child, animation) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(
+                    scale: animation.drive(
+                      Tween<double>(
+                        begin: 0.96,
+                        end: 1.0,
+                      ).chain(CurveTween(curve: Curves.easeOutCubic)),
+                    ),
+                    child: child,
+                  ),
+                );
+              },
+              child: showErrorOverlay
+                  ? Container(
+                      key: const ValueKey('error_overlay'),
+                      color: Colors.white,
+                      child: Center(
+                        child: _buildErrorOverlay(
+                          context,
+                          appState,
+                          appState.errorMessage ?? '未能连接数据库',
+                        ),
+                      ),
+                    )
+                  : isConnecting
+                  ? Container(
+                      key: const ValueKey('loading_overlay'),
+                      color: Colors.white.withValues(alpha: 0.98),
+                      child: Center(child: _buildFancyLoader(context)),
+                    )
+                  : const SizedBox.shrink(key: ValueKey('none')),
             ),
           ),
         ],
@@ -877,6 +951,149 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             style: Theme.of(
               context,
             ).textTheme.bodyMedium?.copyWith(color: Colors.grey[400]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFancyLoader(BuildContext context) {
+    final color = Theme.of(context).colorScheme.primary;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 800),
+      curve: Curves.elasticOut,
+      builder: (context, value, child) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 80,
+              height: 40,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: List.generate(4, (index) {
+                  return _AnimatedBar(
+                    index: index,
+                    color: color,
+                    baseHeight: 12,
+                    maxExtraHeight: 24,
+                  );
+                }),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              '正在建立连接...',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.7),
+                letterSpacing: 1.2,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildErrorOverlay(
+    BuildContext context,
+    AppState appState,
+    String message,
+  ) {
+    final theme = Theme.of(context);
+    final lower = message.toLowerCase();
+    bool isMissingDb =
+        lower.contains('未找到') ||
+        lower.contains('不存在') ||
+        lower.contains('no such file') ||
+        lower.contains('not found');
+
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 400),
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 32),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: theme.colorScheme.error.withValues(alpha: 0.1),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.error.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.error_outline_rounded,
+              size: 40,
+              color: theme.colorScheme.error,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            isMissingDb ? '未找到数据库文件' : '数据库连接异常',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: theme.colorScheme.error,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            isMissingDb ? '请先在「数据管理」页面解密对应账号的数据库。' : message,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 28),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ElevatedButton(
+                onPressed: () =>
+                    appState.setCurrentPage('data_management'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text('前往管理'),
+              ),
+              const SizedBox(width: 12),
+              OutlinedButton(
+                onPressed: _loadData,
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text('重试'),
+              ),
+            ],
           ),
         ],
       ),
@@ -1429,6 +1646,70 @@ class _AnnualReportSubPage extends StatefulWidget {
 
   @override
   State<_AnnualReportSubPage> createState() => _AnnualReportSubPageState();
+}
+
+class _AnimatedBar extends StatefulWidget {
+  final int index;
+  final Color color;
+  final double baseHeight;
+  final double maxExtraHeight;
+
+  const _AnimatedBar({
+    required this.index,
+    required this.color,
+    required this.baseHeight,
+    required this.maxExtraHeight,
+  });
+
+  @override
+  State<_AnimatedBar> createState() => _AnimatedBarState();
+}
+
+class _AnimatedBarState extends State<_AnimatedBar>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+
+    _animation = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
+
+    Future.delayed(Duration(milliseconds: widget.index * 150), () {
+      if (mounted) _controller.repeat(reverse: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return Container(
+          width: 8,
+          height: widget.baseHeight +
+              (widget.maxExtraHeight * _animation.value),
+          decoration: BoxDecoration(
+            color: widget.color.withValues(
+              alpha: 0.3 + (0.7 * _animation.value),
+            ),
+            borderRadius: BorderRadius.circular(4),
+          ),
+        );
+      },
+    );
+  }
 }
 
 class _AnnualReportSubPageState extends State<_AnnualReportSubPage>

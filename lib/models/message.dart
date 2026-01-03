@@ -554,7 +554,8 @@ class Message {
         return '[拍一拍]'; // 具体内容由MessageBubble异步渲染
 
       case 8589934592049: // 转账卡片
-        return '[转账]';
+        final amount = _extractPayAmount(decodedContent);
+        return amount.isNotEmpty ? '转账[$amount元]' : '[转账]';
 
       case 270582939697: // 视频号直播卡片
         return '[视频号直播]';
@@ -869,6 +870,27 @@ class Message {
     } catch (e) {
       return null;
     }
+  }
+
+  static String _extractPayAmount(String xml) {
+    if (xml.isEmpty) return '';
+    final feedesc = _extractValueFromXml(xml, 'feedesc');
+    final fromFeedesc = _parseAmountFromText(feedesc);
+    if (fromFeedesc.isNotEmpty) return fromFeedesc;
+    final des = _extractValueFromXml(xml, 'des');
+    return _parseAmountFromText(des);
+  }
+
+  static String _parseAmountFromText(String text) {
+    if (text.isEmpty) return '';
+    var normalized = text.trim();
+    normalized = normalized
+        .replaceAll('人民币', '')
+        .replaceAll('元', '')
+        .replaceAll('￥', '')
+        .replaceAll('¥', '');
+    final match = RegExp(r'([0-9]+(?:\.[0-9]+)?)').firstMatch(normalized);
+    return match?.group(1) ?? '';
   }
 
   /// 解码二进制内容（处理zstd压缩）
