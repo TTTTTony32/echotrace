@@ -10,7 +10,7 @@ class AnalyticsCacheService {
   static const String _keyAnnualReport = 'cache_annual_report';
   static const String _keyCachedAt = 'cache_timestamp';
   static const String _keyDbModifiedTime = 'cache_db_modified_time';
-  static const int _basicAnalyticsVersion = 3;
+  static const int _basicAnalyticsVersion = 4;
 
   static AnalyticsCacheService get instance {
     _instance ??= AnalyticsCacheService._();

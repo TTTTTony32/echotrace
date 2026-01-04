@@ -122,6 +122,14 @@ class AnalyticsService {
     final privateSessions = sessions
         .where((s) => !s.isGroup && !_isExcludedUsername(s.username))
         .toList();
+    final groupUsernames = sessions
+        .where((s) => s.isGroup)
+        .map((s) => s.username)
+        .toSet();
+    final excludedForTypeStats = {
+      ..._excludedUsernames,
+      ...groupUsernames,
+    };
     await logger.info(
       'AnalyticsService',
       '找到 ${privateSessions.length} 个私聊会话（总会话数: ${sessions.length}）',
@@ -248,6 +256,16 @@ class AnalyticsService {
     await logger.debug('AnalyticsService', '最后消息时间: $lastMessageTime');
     await logger.debug('AnalyticsService', '========== 全部私聊统计分析完成 ==========');
 
+    Map<int, int> messageTypeCounts = {};
+    if (firstMessageTime != null && lastMessageTime != null) {
+      messageTypeCounts =
+          await _databaseService.getAllMessageTypeDistributionByRange(
+        startDate: firstMessageTime!,
+        endDate: lastMessageTime!,
+        excludedUsernames: excludedForTypeStats,
+      );
+    }
+
     return ChatStatistics(
       totalMessages: totalMessages,
       textMessages: textMessages,
@@ -260,6 +278,7 @@ class AnalyticsService {
       firstMessageTime: firstMessageTime,
       lastMessageTime: lastMessageTime,
       activeDays: totalActiveDays,
+      messageTypeCounts: messageTypeCounts,
     );
   }
 

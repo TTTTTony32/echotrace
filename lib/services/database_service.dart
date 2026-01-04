@@ -2268,6 +2268,62 @@ class DatabaseService {
     }
   }
 
+  /// 快速获取所有会话的消息类型分布（带时间范围，SQL直接统计）
+  Future<Map<int, int>> getAllMessageTypeDistributionByRange({
+    required DateTime startDate,
+    required DateTime endDate,
+    Set<String>? excludedUsernames,
+  }) async {
+    if (_sessionDb == null) {
+      throw Exception('数据库未连接');
+    }
+
+    try {
+      final typeCount = <int, int>{};
+      final startTimestamp = startDate.millisecondsSinceEpoch ~/ 1000;
+      final endTimestamp = endDate.millisecondsSinceEpoch ~/ 1000;
+
+      // 使用缓存的数据库连接
+      final cachedDbs = await _getCachedMessageDatabases();
+      final excludedTables =
+          await _getExcludedTableNames(excludedUsernames, cachedDbs);
+
+      // 从所有数据库查询并累加
+      for (final dbInfo in cachedDbs) {
+        try {
+          // 获取所有消息表
+          final tables = await dbInfo.database.rawQuery(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'Msg_%'",
+          );
+
+          // 统计每个表的消息类型
+          for (final table in tables) {
+            final tableName = table['name'] as String;
+            if (excludedTables.contains(tableName)) continue;
+            try {
+              final result = await dbInfo.database.rawQuery('''
+                SELECT local_type, COUNT(*) as count
+                FROM $tableName
+                WHERE create_time BETWEEN ? AND ?
+                GROUP BY local_type
+              ''', [startTimestamp, endTimestamp]);
+
+              for (final row in result) {
+                final type = row['local_type'] as int;
+                final count = row['count'] as int;
+                typeCount[type] = (typeCount[type] ?? 0) + count;
+              }
+            } catch (e) {}
+          }
+        } catch (e) {}
+      }
+
+      return typeCount;
+    } catch (e) {
+      return {};
+    }
+  }
+
   /// 快速获取会话消息统计（不加载所有消息，直接SQL统计）
   Future<Map<String, dynamic>> getSessionMessageStats(
     String sessionId, {

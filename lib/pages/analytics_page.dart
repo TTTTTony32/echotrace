@@ -54,6 +54,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   String _contactSearchQuery = '';
   Set<String> _excludedUsernames = {};
   bool _autoLoadScheduled = false;
+  bool _showAllMessageTypes = false;
 
   bool get _isSubPage => _showAnnualReportSubPage || _showDualReportSubPage;
 
@@ -1283,6 +1284,14 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   Widget _buildMessageTypeChart() {
     final stats = _overallStats!;
     final distribution = stats.messageTypeDistribution;
+    final sortedEntries = distribution.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final totalForDistribution =
+        distribution.values.fold<int>(0, (sum, count) => sum + count);
+    final hasMoreTypes = sortedEntries.length > 5;
+    final visibleEntries = _showAllMessageTypes
+        ? sortedEntries
+        : sortedEntries.take(5).toList();
 
     return Card(
       child: Padding(
@@ -1295,9 +1304,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            ...distribution.entries.map((entry) {
-              final percentage = stats.totalMessages > 0
-                  ? (entry.value / stats.totalMessages * 100).toStringAsFixed(1)
+            ...visibleEntries.map((entry) {
+              final percentage = totalForDistribution > 0
+                  ? (entry.value / totalForDistribution * 100)
+                      .toStringAsFixed(1)
                   : '0.0';
 
               return Padding(
@@ -1307,8 +1317,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                     SizedBox(width: 60, child: Text(entry.key)),
                     Expanded(
                       child: LinearProgressIndicator(
-                        value: stats.totalMessages > 0
-                            ? entry.value / stats.totalMessages
+                        value: totalForDistribution > 0
+                            ? entry.value / totalForDistribution
                             : 0,
                         backgroundColor: Colors.grey[200],
                       ),
@@ -1317,7 +1327,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                     SizedBox(
                       width: 80,
                       child: Text(
-                        '${entry.value} ($percentage%)',
+                        '${entry.value}\n($percentage%)',
                         textAlign: TextAlign.right,
                       ),
                     ),
@@ -1325,6 +1335,41 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 ),
               );
             }),
+            if (hasMoreTypes) ...[
+              AnimatedSize(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeInOut,
+                alignment: Alignment.topCenter,
+                child: Column(
+                  children: [
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.center,
+                      child: TextButton(
+                        onPressed: () {
+                          setState(
+                            () => _showAllMessageTypes = !_showAllMessageTypes,
+                          );
+                        },
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            AnimatedRotation(
+                              turns: _showAllMessageTypes ? 0.5 : 0.0,
+                              duration: const Duration(milliseconds: 200),
+                              curve: Curves.easeInOut,
+                              child: const Icon(Icons.expand_more, size: 16),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(_showAllMessageTypes ? '收起' : '展开'),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),

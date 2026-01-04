@@ -11,6 +11,7 @@ class ChatStatistics {
 
   final int sentMessages; // 发送的消息数
   final int receivedMessages; // 接收的消息数
+  final Map<int, int> messageTypeCounts; // 消息类型分布（local_type -> count）
 
   final DateTime? firstMessageTime; // 第一条消息时间
   final DateTime? lastMessageTime; // 最后一条消息时间
@@ -29,16 +30,85 @@ class ChatStatistics {
     this.firstMessageTime,
     this.lastMessageTime,
     required this.activeDays,
-  });
+    Map<int, int>? messageTypeCounts,
+  }) : messageTypeCounts = messageTypeCounts ?? const {};
 
   /// 获取消息类型分布
-  Map<String, int> get messageTypeDistribution => {
-    '文本': textMessages,
-    '图片': imageMessages,
-    '语音': voiceMessages,
-    '视频': videoMessages,
-    '其他': otherMessages,
-  };
+  Map<String, int> get messageTypeDistribution {
+    if (messageTypeCounts.isNotEmpty) {
+      const typeLabels = {
+        1: '文本',
+        244813135921: '文本',
+        3: '图片',
+        34: '语音',
+        43: '视频',
+        47: '表情',
+        48: '位置',
+        49: '链接/文件',
+        42: '名片',
+        17179869233: '链接',
+        21474836529: '图文',
+        154618822705: '小程序',
+        12884901937: '音乐',
+        81604378673: '聊天记录',
+        266287972401: '拍一拍',
+        270582939697: '视频号',
+        25769803825: '文件',
+        8594229559345: '红包',
+        8589934592049: '转账',
+        10000: '系统消息',
+      };
+      const typeOrder = [
+        1,
+        244813135921,
+        3,
+        34,
+        43,
+        47,
+        48,
+        49,
+        42,
+        17179869233,
+        21474836529,
+        154618822705,
+        12884901937,
+        81604378673,
+        266287972401,
+        270582939697,
+        25769803825,
+        8594229559345,
+        8589934592049,
+        10000,
+      ];
+
+      final distribution = <String, int>{};
+      final remaining = Map<int, int>.from(messageTypeCounts);
+      for (final type in typeOrder) {
+        final count = remaining.remove(type);
+        if (count == null || count == 0) continue;
+        final label = typeLabels[type] ?? '其他';
+        distribution[label] = (distribution[label] ?? 0) + count;
+      }
+      final otherCount = remaining.values.fold<int>(
+        0,
+        (sum, count) => sum + count,
+      );
+      if (otherCount > 0) {
+        distribution['其他'] = (distribution['其他'] ?? 0) + otherCount;
+      }
+      if (distribution.isNotEmpty) {
+        return distribution;
+      }
+    }
+
+    return {
+      '文本': textMessages,
+      '图片': imageMessages,
+      '语音': voiceMessages,
+      '视频': videoMessages,
+      '其他': otherMessages,
+    };
+  }
 
   /// 获取发送/接收比例
   Map<String, int> get sendReceiveRatio => {
@@ -70,6 +140,9 @@ class ChatStatistics {
     'firstMessageTime': firstMessageTime?.toIso8601String(),
     'lastMessageTime': lastMessageTime?.toIso8601String(),
     'activeDays': activeDays,
+    'messageTypeCounts': messageTypeCounts.map(
+      (key, value) => MapEntry(key.toString(), value),
+    ),
   };
 
   factory ChatStatistics.fromJson(Map<String, dynamic> json) => ChatStatistics(
@@ -88,7 +161,21 @@ class ChatStatistics {
         ? DateTime.parse(json['lastMessageTime'])
         : null,
     activeDays: json['activeDays'],
+    messageTypeCounts: _parseMessageTypeCounts(json['messageTypeCounts']),
   );
+
+  static Map<int, int> _parseMessageTypeCounts(dynamic raw) {
+    if (raw is! Map) return {};
+    final result = <int, int>{};
+    raw.forEach((key, value) {
+      final parsedKey = int.tryParse(key.toString());
+      final parsedValue = value is int ? value : int.tryParse(value.toString());
+      if (parsedKey != null && parsedValue != null) {
+        result[parsedKey] = parsedValue;
+      }
+    });
+    return result;
+  }
 }
 
 /// 时间分布统计
