@@ -1380,7 +1380,7 @@ class _SettingsPageState extends State<SettingsPage>
                         return '请输入wxid';
                       }
                       final isWxidFormat = RegExp(
-                        r'^wxid_[^_]+_[a-zA-Z0-9]{4}$',
+                        r'^wxid_[a-zA-Z0-9]{14}_[a-zA-Z0-9]{4}$',
                         caseSensitive: false,
                       ).hasMatch(value.trim());
                       if (!isWxidFormat) {

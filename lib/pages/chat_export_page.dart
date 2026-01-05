@@ -1673,10 +1673,23 @@ class _ExportProgressDialogState extends State<_ExportProgressDialog> {
 
       final startTime = widget.useAllTime
           ? null
-          : widget.dateRange.start.millisecondsSinceEpoch ~/ 1000;
+          : DateTime(
+                widget.dateRange.start.year,
+                widget.dateRange.start.month,
+                widget.dateRange.start.day,
+              ).millisecondsSinceEpoch ~/
+              1000;
       final endTime = widget.useAllTime
           ? null
-          : widget.dateRange.end.millisecondsSinceEpoch ~/ 1000;
+          : DateTime(
+                widget.dateRange.end.year,
+                widget.dateRange.end.month,
+                widget.dateRange.end.day,
+                23,
+                59,
+                59,
+              ).millisecondsSinceEpoch ~/
+              1000;
 
       // 提前获取所有会话，避免循环中重复调用
       final sessions = await dbService.getSessions();
